@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:hive_ce_flutter/hive_flutter.dart';
+import 'package:persistent_data/car.dart';
+import 'package:persistent_data/note.dart';
+import 'package:realm/realm.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Hive.initFlutter();
+void main() {
   runApp(NotesApp());
 }
 
@@ -26,118 +26,104 @@ class NotesScreen extends StatefulWidget {
 }
 
 class _NotesScreenState extends State<NotesScreen> {
-  late Box box;
-  final noteCtrl = TextEditingController();
-  List notes = [];
+  late Realm realm;
+  late RealmResults<Note> notes;
 
-  void initBox() async {
-    box = await Hive.openBox('notes');
-    loadBox();
+  final titleCtrl = TextEditingController();
+  final contentCtrl = TextEditingController();
+
+  void loadNotes() {
+    notes = realm.all<Note>();
+    setState(() {});
   }
 
-  void loadBox() async {
-    notes = box.values.toList();
-    setState(() {});
-    print(notes);
+  void initRealm() {
+    var config = Configuration.local([Note.schema]);
+    realm = Realm(config);
+    loadNotes();
   }
 
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
-    //open box
-    initBox();
+    initRealm();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: ListView.builder(
-          itemBuilder: (_, index) {
-            return Dismissible(
-              key: UniqueKey(),
-              onDismissed: (direction) {
-                doDelete(index);
-              },
-              child: Card(
-                child: ListTile(
-                  title: Text(notes.elementAt(index)),
-                ),
+          child: ListView.builder(
+        itemBuilder: (_, index) {
+          var note = notes[index];
+          return Dismissible(
+            key: UniqueKey(),
+            onDismissed: (_) {
+              doDelete(note);
+            },
+            child: Card(
+              child: ListTile(
+                title: Text(note.title),
+                subtitle: Text(note.content),
+                trailing: Text(note.date.toString()),
               ),
-            );
-          },
-          itemCount: notes.length,
-        ),
-      ),
+            ),
+          );
+        },
+        itemCount: notes.length,
+      )),
       floatingActionButton: FloatingActionButton(
-        onPressed: showAddNote,
-        child: Icon(Icons.add),
+        onPressed: showAddDialog,
+        child: const Icon(
+          Icons.add,
+        ),
       ),
     );
   }
 
-  void showAddNote() {
+  void showAddDialog() {
     showDialog(
         context: context,
         builder: (_) {
           return AlertDialog(
-            title: const Text('Add Note'),
-            content: TextField(
-              controller: noteCtrl,
-            ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Close'),
+              ElevatedButton(
+                onPressed: doAdd,
+                child: const Text('Add'),
               ),
-              ElevatedButton(onPressed: doAdd, child: const Text('Add'))
             ],
+            title: const Text('Add Note'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleCtrl,
+                ),
+                TextField(
+                  controller: contentCtrl,
+                ),
+              ],
+            ),
           );
         });
   }
 
   void doAdd() {
-    //add to box
-    box.add(noteCtrl.text);
+    realm.write(() {
+      var note = Note(titleCtrl.text, contentCtrl.text, date: DateTime.now());
+
+      realm.add(note);
+    });
+    print('added');
     Navigator.of(context).pop();
-    noteCtrl.clear();
-    loadBox();
-    print('added note');
+    loadNotes();
   }
 
-  void doDelete(int i) {
-    //delete in the box
-    box.deleteAt(i);
-    loadBox();
+  void doDelete(Note n) {
+    realm.write(() {
+      realm.delete(n);
+    });
+    loadNotes();
   }
 }
-
-// class NotesScreen extends StatelessWidget {
-//   const NotesScreen({super.key});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       body: Column(
-//         children: [
-//           ElevatedButton(
-//               onPressed: () async {
-//                 var box = await Hive.openBox('items');
-//                 // box.put('name', 'arni');
-//                 box.add('tamayo');
-//                 print('saved');
-//               },
-//               child: Text('open box')),
-//           ElevatedButton(
-//               onPressed: () async {
-//                 var box = await Hive.openBox('items');
-//                 var item = box.get(0);
-//                 print(item);
-//               },
-//               child: Text('get name')),
-//         ],
-//       ),
-//     );
-//   }
-// }
